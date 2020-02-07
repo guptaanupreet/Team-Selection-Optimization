@@ -1,0 +1,186 @@
+1. Maximizing projected score only on the basis of salary constrain and position constrain.
+model ModelName
+uses "mmxprs"; !gain access to the Xpress-Optimizer solver
+!optional parameters section
+parameters
+   PROJECTDIR='' ! for when file is added to project
+end-parameters
+
+declarations
+	! Set definition
+	P=1..100
+	Po = 1..5
+	
+	! variables
+	x : array(P,Po) of mpvar
+	
+	! Data
+	s : array(Po,P) of real
+	p : array(Po,P) of real
+	Position : array(Po,P) of integer
+	level : array(P) of integer
+
+  Objective:linctr
+end-declarations
+
+initializations from 'salary_updated.txt'
+	s	
+end-initializations
+
+initializations from 'projectedscore_updated.txt'
+	p	
+end-initializations
+
+initializations from 'position.txt'
+	Position	
+end-initializations
+
+initializations from 'level_updated.txt'
+	level	
+end-initializations
+
+
+forall (i in P, j in Po) do
+	x(i,j) is_binary ! is_integer 
+end-do	
+
+! Model
+Obj :=  sum(i in P,j in Po)p(j,i)*x(i,j)
+
+sum(i in P,j in Po)s(j,i)*x(i,j) <= 50000
+sum(i in P,j in Po)x(i,j)=6
+
+forall (j in Po) do
+	sum(i in P)x(i,j)*Position(j,i)>=1
+end-do
+
+forall (j in Po| j=1 or j=5 ) do
+	sum(i in P)x(i,j) = 1
+end-do
+
+maximize(Obj)
+! Output
+writeln("Model Solved -  Optimial Objective is ",getobjval)
+forall(i in P, j in Po | getsol(x(i,j) ) <> 0) do
+	writeln("x",i,j," = ",getsol(x(i,j)) )
+end-do
+end-model
+
+2. Maximizing projected score and finding two best teams on the basis of salary constrain, position constrain and international diversity.
+model ModelName
+uses "mmxprs"; 
+parameters
+   PROJECTDIR='' ! for when file is added to project
+end-parameters
+declarations
+	! Set definition
+	P=1..100
+	Po = 1..5
+	
+	! variables
+	x : array(P,Po) of mpvar
+	y : array(P,Po) of mpvar
+	w : array(P,Po) of mpvar
+	
+	! Data
+	s : array(P,Po) of real
+	p : array(P,Po) of real
+	Position : array(P,Po) of integer
+	level : array(P) of integer
+
+Objective:linctr
+end-declarations
+! Salary matrix
+initializations from 'salary_updated_v2.txt'
+	s	
+end-initializations
+
+! Projected score matrix
+initializations from 'projectedscore_updated_V2.txt'
+	p	
+end-initializations
+
+! Player position matrix
+initializations from 'position_v2.txt'
+	Position	
+end-initializations
+
+! The  below condition is added only to include another level of diversity
+initializations from 'level_updated.txt'
+	level	
+end-initializations
+
+! Defining the decision variable as binary for the team one selection
+forall (i in P, j in Po) do
+	x(i,j) is_binary ! is_integer is_free
+end-do	
+
+!  Defining the decision variable as binary for the 2nd best team selection
+forall (i in P, j in Po) do
+	y(i,j) is_binary ! is_integer is_free
+end-do	
+
+! defining W as 1 if a player is playing in the best and the 2nd best team
+forall (i in P, j in Po) do
+	w(i,j) is_binary ! is_integer is_free
+end-do	
+
+! Model
+! Maximize the Projected score of the team
+Obj :=  sum(i in P,j in Po)p(i,j)*x(i,j) + sum(i in P,j in Po)p(i,j)*y(i,j)
+
+! adding the constraint of keeping the total cost of players below 50000
+sum(i in P,j in Po)s(i,j)*x(i,j)  <= 50000
+
+! adding the constraint of keeping the total cost of players below 50000: team 2
+sum(i in P,j in Po)s(i,j)*y(i,j)  <= 50000
+
+! keeping the max number of players who play in international level as 2 : team 1
+sum(i in P,j in Po)level(i)*x(i,j) <= 2
+
+! keeping the max number of players who play in international level as 2 : team 2
+sum(i in P,j in Po)level(i)*y(i,j) <= 2
+! Keeping the number of players in a team as 6 : team1
+sum(i in P,j in Po)x(i,j)=6
+! Keeping the number of players in a team as 6 : team2
+sum(i in P,j in Po)y(i,j)=6
+! keeping the max number of common players between 2nd best team and the first best team as 5
+sum(i in P,j in Po)w(i,j)<=5
+
+! Selecting at least one player from each of the positions : team 1
+forall (j in Po) do
+	sum(i in P)x(i,j)*Position(i,j)>=1
+end-do
+! Multiple Players can be selected from positions 1 & 5 : team 1 
+forall (j in Po| j=1 or j=5 ) do
+	sum(i in P)x(i,j)*Position(i,j) = 1
+end-do
+! Selecting at least one player from each of the positions : team 2
+forall (j in Po) do
+	sum(i in P)y(i,j)*Position(i,j)>=1
+end-do
+! Multiple Players can be selected from positions 1 & 5 : team 2
+forall (j in Po| j=1 or j=5 ) do
+	sum(i in P)y(i,j)*Position(i,j) = 1
+end-do
+! Keeping the relationships between both the teams according to W
+forall (i in P, j in Po) do
+	w(i,j) + 1 >=	y(i,j) + x(i,j) 
+end-do	
+
+maximize(Obj)
+! Output
+writeln("Model Solved -  Optimial Objective is ",getobjval)
+forall(i in P, j in Po | getsol(x(i,j) ) <> 0) do
+	writeln("x",i,j," = ",getsol(x(i,j)))
+		end-do
+writeln(getsol(sum(i in P,j in Po)p(i,j)*x(i,j)))
+
+writeln("Model Solved -  Optimial Objective is ",getobjval)
+forall(i in P, j in Po | getsol(y(i,j) ) <> 0) do
+	writeln("y",i,j," = ",getsol(y(i,j)) )
+end-do
+
+	writeln(getsol(sum(i in P,j in Po)p(i,j)*y(i,j)))
+
+end-model
